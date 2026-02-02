@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LockIn</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.6s ease-in-out;
+}
+body.visible { opacity: 1; }
+
+#content {
+    background-color: rgba(255,255,255,0.95);
+    color: #333;
+    backdrop-filter: blur(10px);
+    padding: 40px 50px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    max-width: 400px;
+    width: 100%;
+    transform: translateY(20px);
+    transition: transform 0.6s ease-in-out, opacity 0.6s ease-in-out;
+}
+body.visible #content { transform: translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+<div id="content">
+    <h1>Welcome to LockIn!</h1>
+    <p>Loading...</p>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    document.body.classList.add('visible'); // fade in
+
+    setTimeout(() => {
+        document.body.classList.remove('visible'); // fade out
+
+        setTimeout(() => {
+            // Just navigate to /timer, server will redirect to /login if not authenticated
+            window.location.href = '/timer';
+        }, 600); // fade-out duration
+    }, 1000); // show content briefly
+});
+</script>
+</body>
+</html>
