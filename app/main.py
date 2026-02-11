@@ -1,12 +1,14 @@
 from app.api.v1.auth import router as auth_router
 from app.api.v1.users import router as users_router
 from app.core.security import decode_access_token
+from app.middleware.logging import LoggingMiddleware
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="LockIn")
+app.add_middleware(LoggingMiddleware)
 templates = Jinja2Templates(directory="app/templates")
 
 # Include routers
