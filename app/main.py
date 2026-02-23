@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, date
 from pathlib import Path
 import random
 import json
+import time
 
 # -----------------------------
 # CONFIG
@@ -28,7 +29,7 @@ from .db.schemas import (
     UserStats, LeaderboardEntry, LeaderboardResponse,
     CasinoSpinRequest, CasinoSpinResponse, CasinoStatsResponse
 )
-from .middleware.logging import LoggingMiddleware
+from .middleware.logging import LoggingMiddleware, logger
 
 DB_PATH = properties["path"]["db"] / "app.db"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
@@ -46,6 +47,12 @@ SECURITY_PAGES = properties["path"]["security_pages"]
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
+
+
+# -----------------------------
+# TABLES
+# -----------------------------
+
 
 
 class User(Base):
@@ -78,6 +85,9 @@ class CasinoSpinTable(Base):
     win_amount = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+# -----------------------------
+# DB
+# -----------------------------
 
 
 def get_db():
@@ -117,22 +127,34 @@ pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 security = HTTPBearer()
 
 
-def hash_password(password: str):
+def hash_password(password: str) -> str:
+    """
+    Hashes password
+    """
     print(len(password))
     return pwd_context.hash(password)
 
 
-def verify_password(password: str, hashed: str):
+def verify_password(password: str, hashed: str) -> bool:
+    """
+    Verifies password
+    """
     return pwd_context.verify(password, hashed)
 
 
-def create_access_token(username: str):
+def create_access_token(username: str) -> str:
+    """
+    Creates access token (payload hashed by secret key)
+    """
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {"sub": username, "exp": expire}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Get user by access token
+    """
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -163,6 +185,12 @@ app.add_middleware(LoggingMiddleware)
 # PROTECT SPA MIDDLEWARE
 # -----------------------------
 class AuthRequiredMiddleware(BaseHTTPMiddleware):
+    """
+    Protects SPA
+
+    If user does not have / have invalid access token:
+        redirect to login page
+    """
     async def dispatch(self, request: Request, call_next):
         # Only protect SPA
         print(request.url)
@@ -192,11 +220,13 @@ app.mount("/app", StaticFiles(directory=FRONT_END, html=True), name="frontend")
 # -----------------------------
 @app.get("/login", response_class=FileResponse)
 async def login_page():
+    """Login page"""
     return SECURITY_PAGES / "login.html"
 
 
 @app.get("/register", response_class=FileResponse)
 async def register_page():
+    """Register page"""
     return SECURITY_PAGES / "register.html"
 
 
@@ -205,6 +235,7 @@ async def register_page():
 # -----------------------------
 @app.get("/")
 async def root(request: Request):
+    """Redirects if user does not have / have invalid access token"""
     token = request.cookies.get("access_token")
     if token:
         try:
@@ -225,6 +256,10 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.post("/register")
 def register(data: UserRegister, response: Response, db: Session = Depends(get_db)):
+    """
+    POST register
+
+    Validates nickname and register usar"""
     # check username
     if db.query(User).filter_by(username=data.username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -244,6 +279,11 @@ def register(data: UserRegister, response: Response, db: Session = Depends(get_d
 
 @api_router.post("/login", response_model=TokenResponse)
 def login(data: UserLogin, response: Response, db: Session = Depends(get_db)):
+    """
+    POST login
+
+    Validates credentials and returns access token
+    """
     user = db.query(User).filter_by(username=data.username).first()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -265,6 +305,7 @@ def login(data: UserLogin, response: Response, db: Session = Depends(get_db)):
 
 @api_router.get("/stats", response_model=StatsResponse)
 def stats(user=Depends(get_current_user)):
+    """Stats"""
     return StatsResponse(user=user, progress=0)
 
 
@@ -274,6 +315,11 @@ def stats(user=Depends(get_current_user)):
 
 @api_router.get("/dashboard/stats", response_model=UserStats)
 def dashboard_stats(request: Request, db: Session = Depends(get_db)):
+    """
+    Dashboard stats
+
+    Stats of the user
+    """
     user = get_current_user_from_cookie(request)
     db_user = db.query(User).filter_by(username=user).first()
     if not db_user:
@@ -303,6 +349,9 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
 
 @api_router.get("/dashboard/leaderboard", response_model=LeaderboardResponse)
 def dashboard_leaderboard(request: Request, db: Session = Depends(get_db)):
+    """
+    Leaderboard (Top students)
+    """
     user = get_current_user_from_cookie(request)
     # Get all users sorted by total_study_minutes
     all_users = db.query(User).order_by(User.total_study_minutes.desc()).all()
@@ -348,15 +397,31 @@ SLOT_SYMBOLS = [
 
 @api_router.post("/casino/spin", response_model=CasinoSpinResponse)
 def casino_spin(data: CasinoSpinRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    POST casino spin logic
+
+    - Checks if user have enough points
+    - Returns random slot position
+    - Logs changes
+    """
+    start = time.perf_counter()  # track duration
+
     user = get_current_user_from_cookie(request)
     db_user = db.query(User).filter_by(username=user).first()
     if not db_user:
+        duration = time.perf_counter() - start
+        client_ip = request.client.host if request.client else "-"
+        logger.info("%s POST /casino/spin %s %.4fs", client_ip, 404, duration)
         raise HTTPException(status_code=404, detail="User not found")
 
     if (db_user.points or 0) < data.bet_amount:
+        duration = time.perf_counter() - start
+        client_ip = request.client.host if request.client else "-"
+        logger.info("%s/%s casino spin %.4fs %s NOT ENOUGH POINTS", client_ip, db_user.username, 400, duration)
         raise HTTPException(status_code=400, detail="Not enough points")
 
     # Deduct bet
+    points_before = db_user.points
     db_user.points = (db_user.points or 0) - data.bet_amount
 
     # Server generates random result
@@ -370,11 +435,9 @@ def casino_spin(data: CasinoSpinRequest, request: Request, db: Session = Depends
     is_double = False
 
     if slot0 == slot1 == slot2:
-        # Jackpot — all three match
         is_jackpot = True
         win_amount = SLOT_SYMBOLS[slot0]["value"] * 3
     elif slot0 == slot1 or slot1 == slot2 or slot0 == slot2:
-        # Two match
         is_double = True
         win_amount = int(data.bet_amount * 1.5)
 
@@ -392,6 +455,18 @@ def casino_spin(data: CasinoSpinRequest, request: Request, db: Session = Depends
     db.commit()
     db.refresh(db_user)
 
+    # Log the successful response
+    duration = time.perf_counter() - start
+    client_ip = request.client.host if request.client else "-"
+
+    logger.info("%s/%s spin[%s, %s, %s] win: %s, balance: %s -> %s",
+                client_ip, db_user.username,
+                *(value for value in slots),
+                win_amount,
+                points_before,
+                db_user.points or 0,
+                )
+
     return CasinoSpinResponse(
         slots=slots,
         win_amount=win_amount,
@@ -401,8 +476,15 @@ def casino_spin(data: CasinoSpinRequest, request: Request, db: Session = Depends
     )
 
 
+
 @api_router.get("/casino/stats", response_model=CasinoStatsResponse)
 def casino_stats(request: Request, db: Session = Depends(get_db)):
+    """
+    POST casino stats logic
+
+    - Updates db (wins, winrate, spin today, total winnings)
+
+    """
     user = get_current_user_from_cookie(request)
     db_user = db.query(User).filter_by(username=user).first()
     if not db_user:

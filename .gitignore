@@ -1,1 +1,7 @@
 *.pyc
+
+*.log
+*.db
+secret_key
+__pycache__
+node_modules
