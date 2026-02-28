@@ -9,13 +9,15 @@ import json
 import time
 from pydantic import BaseModel
 from typing import Optional
+import os
+import shutil
 
 # -----------------------------
 # CONFIG
 # -----------------------------
 from config import properties
-from fastapi import (APIRouter, Depends, FastAPI, HTTPException, Request,
-                     Response)
+from fastapi import (APIRouter, Depends, FastAPI, File, Form, HTTPException, Request,
+                     Response, UploadFile)
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -330,7 +332,7 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
     # Sessions today
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     sessions_today = db.execute(
-        text(f"SELECT COUNT(*) FROM study_sessions WHERE user_id = {db_user.id} AND started_at >= '{today_start.isoformat()}'")
+        text(f"SELECT COUNT(*) FROM study_sessions WHERE user_id = {db_user.id} AND ended_at >= '{today_start.isoformat()}'")
     ).scalar() or 0
 
     # Weekly minutes
@@ -595,5 +597,92 @@ def casino_stats(request: Request, db: Session = Depends(get_db)):
         win_rate=round(win_rate, 1),
     )
 
+# ---------------------------
+# REPORTS API
+# ---------------------------
+
+REPORTS_DIR = properties["path"]["root"] / "reports"
+REPORTS_FILE = REPORTS_DIR / "report.txt"
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@api_router.post("/report")
+async def submit_report(
+    request: Request,
+    student_name: str = Form(...),
+    violation_type: str = Form(...),
+    description: str = Form(""),
+    image: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit a report about a violator
+    """
+    user = get_current_user_from_cookie(request)
+
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+
+    report_number = 1
+    if REPORTS_FILE.exists():
+        with open(REPORTS_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            for line in reversed(lines):
+                if line.startswith("Report #"):
+                    try:
+                        report_number = int(line.split("#")[1].split()[0]) + 1
+                    except (ValueError, IndexError):
+                        pass
+                    break
+
+    image_filename = "no_image"
+    if image and image.filename:
+        report_folder = REPORTS_DIR / str(report_number)
+        os.makedirs(report_folder, exist_ok=True)
+
+        content = await image.read()
+        if len(content) > MAX_IMAGE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image too large. Maximum size is 10 MB, got {len(content) / 1024 / 1024:.1f} MB"
+            )
+
+        allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+        ext = os.path.splitext(image.filename)[1].lower()
+        if ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
+            )
+
+
+        if content:
+            image_filename = f"proof{ext}"
+            image_path = report_folder / image_filename
+            with open(image_path, "wb") as f:
+                f.write(content)
+
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    report_entry = (
+        f"Report #{report_number}\n" +
+        f"  Date: {timestamp}\n" +
+        f"  Reporter: {user}\n" +
+        f"  Student: {student_name}\n" +
+        f"  Violation: {violation_type}\n" +
+        f"  Description: {description}\n" +
+        f"  Image: {image_filename}\n" +
+        (f"  Folder: reports/{report_number}/\n" if image else "") +
+        f"{'-' * 40}\n"
+    )
+
+    with open(REPORTS_FILE, "a", encoding="utf-8") as f:
+        f.write(report_entry)
+
+    logger.info("Report #%s submitted by %s against %s (%s)",
+                report_number, user, student_name, violation_type)
+
+    return {
+        "message": "Report submitted successfully",
+        "report_number": report_number,
+    }
 
 app.include_router(api_router)

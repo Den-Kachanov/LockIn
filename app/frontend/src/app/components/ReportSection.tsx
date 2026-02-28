@@ -1,17 +1,85 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, Camera, Upload, X } from 'lucide-react';
 
 export function ReportSection() {
   const [showModal, setShowModal] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    setTimeout(() => {
-      setShowModal(false);
-      setSubmitted(false);
-    }, 2000);
+  const [studentName, setStudentName] = useState('');
+  const [violationType, setViolationType] = useState('Cheating');
+  const [description, setDescription] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_SIZE_MB = 10;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      setError(`File too large! Maximum ${MAX_SIZE_MB} MB`);
+      return;
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Only images allowed (jpg, png, gif, webp, bmp)');
+      return;
+    }
+
+    setError('');
+    setSelectedFile(file);
+  };
+
+  const handleSubmit = async () => {
+    if (!studentName.trim()) {
+      setError('Enter student name');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('student_name', studentName);
+      formData.append('violation_type', violationType);
+      formData.append('description', description);
+      if (selectedFile) {
+        formData.append('image', selectedFile);
+      }
+
+      const res = await fetch('/api/report', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.detail || 'Failed to submit report');
+        setSubmitting(false);
+        return;
+      }
+
+      setSubmitted(true);
+      setTimeout(() => {
+        setShowModal(false);
+        setSubmitted(false);
+        setStudentName('');
+        setViolationType('Cheating');
+        setDescription('');
+        setSelectedFile(null);
+      }, 2000);
+    } catch (e) {
+      setError('Network error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -48,7 +116,7 @@ export function ReportSection() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => !submitted && setShowModal(false)}
+              onClick={() => !submitted && !submitting && setShowModal(false)}
             />
 
             {/* Modal Content */}
@@ -62,18 +130,13 @@ export function ReportSection() {
                 {/* Glow Effect */}
                 <motion.div
                   className="absolute -inset-2 bg-red-500/20 rounded-2xl blur-xl"
-                  animate={{
-                    opacity: [0.3, 0.5, 0.3],
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                  }}
+                  animate={{ opacity: [0.3, 0.5, 0.3] }}
+                  transition={{ duration: 2, repeat: Infinity }}
                 />
 
                 <div className="relative">
                   {/* Close Button */}
-                  {!submitted && (
+                  {!submitted && !submitting && (
                     <button
                       onClick={() => setShowModal(false)}
                       className="absolute -top-2 -right-2 w-8 h-8 bg-red-500/80 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors"
@@ -98,6 +161,8 @@ export function ReportSection() {
                           </label>
                           <input
                             type="text"
+                            value={studentName}
+                            onChange={(e) => setStudentName(e.target.value)}
                             className="w-full px-4 py-3 bg-black/30 border border-white/20 rounded-xl text-white placeholder-white/30 focus:border-[#00d9ff] focus:outline-none transition-colors"
                             placeholder="Enter name..."
                           />
@@ -107,7 +172,11 @@ export function ReportSection() {
                           <label className="block text-sm text-white/70 mb-2">
                             Violation Type
                           </label>
-                          <select className="w-full px-4 py-3 bg-black/30 border border-white/20 rounded-xl text-white focus:border-[#00d9ff] focus:outline-none transition-colors">
+                          <select
+                            value={violationType}
+                            onChange={(e) => setViolationType(e.target.value)}
+                            className="w-full px-4 py-3 bg-black/30 border border-white/20 rounded-xl text-white focus:border-[#00d9ff] focus:outline-none transition-colors"
+                          >
                             <option>Cheating</option>
                             <option>Not studying</option>
                             <option>Fake study time</option>
@@ -117,11 +186,33 @@ export function ReportSection() {
 
                         <div>
                           <label className="block text-sm text-white/70 mb-2">
-                            Upload Proof
+                            Upload Proof (max 10 MB)
                           </label>
-                          <div className="border-2 border-dashed border-white/20 rounded-xl p-6 text-center hover:border-[#00d9ff]/50 transition-colors cursor-pointer">
-                            <Upload className="w-8 h-8 text-white/50 mx-auto mb-2" />
-                            <p className="text-sm text-white/50">Click to upload image</p>
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="image/*"
+                            onChange={handleFileChange}
+                            className="hidden"
+                          />
+                          <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className="border-2 border-dashed border-white/20 rounded-xl p-6 text-center hover:border-[#00d9ff]/50 transition-colors cursor-pointer"
+                          >
+                            {selectedFile ? (
+                              <div>
+                                <Camera className="w-8 h-8 text-green-400 mx-auto mb-2" />
+                                <p className="text-sm text-green-400">{selectedFile.name}</p>
+                                <p className="text-xs text-white/50 mt-1">
+                                  {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
+                                </p>
+                              </div>
+                            ) : (
+                              <div>
+                                <Upload className="w-8 h-8 text-white/50 mx-auto mb-2" />
+                                <p className="text-sm text-white/50">Click to upload image</p>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -130,19 +221,27 @@ export function ReportSection() {
                             Description
                           </label>
                           <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
                             className="w-full px-4 py-3 bg-black/30 border border-white/20 rounded-xl text-white placeholder-white/30 focus:border-[#00d9ff] focus:outline-none transition-colors h-24 resize-none"
                             placeholder="Describe the violation..."
                           />
                         </div>
 
+                        {/* Error */}
+                        {error && (
+                          <div className="text-sm text-red-400 text-center">{error}</div>
+                        )}
+
                         {/* Submit Button */}
                         <motion.button
                           onClick={handleSubmit}
-                          className="w-full py-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-xl text-white font-bold shadow-lg"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
+                          disabled={submitting}
+                          className="w-full py-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-xl text-white font-bold shadow-lg disabled:opacity-50"
+                          whileHover={!submitting ? { scale: 1.02 } : {}}
+                          whileTap={!submitting ? { scale: 0.98 } : {}}
                         >
-                          SUBMIT REPORT
+                          {submitting ? 'SUBMITTING...' : 'SUBMIT REPORT'}
                         </motion.button>
                       </div>
                     </>
