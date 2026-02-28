@@ -3,22 +3,22 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Users, Target, MessageCircle, Trophy, Crown, Star, Zap } from 'lucide-react';
 
 const studyGroups = [
-  { id: 1, name: 'Discrete Math Masters', members: 24, active: 8, subject: 'Mathematics', color: '#00d9ff', emoji: '📐' },
-  { id: 2, name: 'Algorithm Grinders', members: 18, active: 12, subject: 'Computer Science', color: '#ff00ff', emoji: '💻' },
-  { id: 3, name: 'Late Night Study Crew', members: 31, active: 5, subject: 'All Subjects', color: '#ffd700', emoji: '🌙' },
-  { id: 4, name: 'Final Exam Warriors', members: 42, active: 15, subject: 'All Subjects', color: '#00d9ff', emoji: '⚔️' },
-  { id: 5, name: 'Physics Legends', members: 19, active: 7, subject: 'Physics', color: '#ff00ff', emoji: '⚛️' },
-  { id: 6, name: 'English Pros', members: 27, active: 9, subject: 'Languages', color: '#ffd700', emoji: '📝' },
-  { id: 7, name: 'Data Science Squad', members: 35, active: 11, subject: 'Computer Science', color: '#00d9ff', emoji: '📊' },
-  { id: 8, name: 'Philosophy Circle', members: 14, active: 4, subject: 'Humanities', color: '#ff00ff', emoji: '🧠' },
+  { id: 1, name: 'Discrete Math Masters', subject: 'Mathematics', color: '#00d9ff', emoji: '📐' },
+  { id: 2, name: 'Algorithm Grinders', subject: 'Computer Science', color: '#ff00ff', emoji: '💻' },
+  { id: 3, name: 'Late Night Study Crew', subject: 'All Subjects', color: '#ffd700', emoji: '🌙' },
+  { id: 4, name: 'Final Exam Warriors', subject: 'All Subjects', color: '#00d9ff', emoji: '⚔️' },
+  { id: 5, name: 'Physics Legends', subject: 'Physics', color: '#ff00ff', emoji: '⚛️' },
+  { id: 6, name: 'English Pros', subject: 'Languages', color: '#ffd700', emoji: '📝' },
+  { id: 7, name: 'Data Science Squad', subject: 'Computer Science', color: '#00d9ff', emoji: '📊' },
+  { id: 8, name: 'Philosophy Circle', subject: 'Humanities', color: '#ff00ff', emoji: '🧠' },
 ];
 
 const challenges = [
-  { id: 1, title: '100 Hour Challenge', description: 'Study 100 hours this month', progress: 67, total: 100, unit: 'hours', reward: 500, participants: 156, timeLeft: '12 days', icon: '🔥' },
-  { id: 2, title: 'Early Bird Week', description: 'Study before 8 AM for 7 days', progress: 4, total: 7, unit: 'days', reward: 300, participants: 89, timeLeft: '3 days', icon: '🌅' },
-  { id: 3, title: 'Weekend Warrior', description: 'Complete 10 sessions on weekends', progress: 6, total: 10, unit: 'sessions', reward: 200, participants: 234, timeLeft: '2 weeks', icon: '⚡' },
-  { id: 4, title: 'Pomodoro King', description: 'Complete 50 pomodoro sessions', progress: 23, total: 50, unit: 'sessions', reward: 400, participants: 112, timeLeft: '20 days', icon: '🍅' },
-  { id: 5, title: 'Streak Master', description: 'Maintain a 14-day study streak', progress: 9, total: 14, unit: 'days', reward: 350, participants: 78, timeLeft: '5 days', icon: '🏆' },
+  { id: 1, title: '100 Hour Challenge', description: 'Study 100 hours this month', progress: 67, total: 100, unit: 'hours', reward: 500, timeLeft: '12 days', icon: '🔥' },
+  { id: 2, title: 'Early Bird Week', description: 'Study before 8 AM for 7 days', progress: 4, total: 7, unit: 'days', reward: 300, timeLeft: '3 days', icon: '🌅' },
+  { id: 3, title: 'Weekend Warrior', description: 'Complete 10 sessions on weekends', progress: 6, total: 10, unit: 'sessions', reward: 200, timeLeft: '2 weeks', icon: '⚡' },
+  { id: 4, title: 'Pomodoro King', description: 'Complete 50 pomodoro sessions', progress: 23, total: 50, unit: 'sessions', reward: 400, timeLeft: '20 days', icon: '🍅' },
+  { id: 5, title: 'Streak Master', description: 'Maintain a 14-day study streak', progress: 9, total: 14, unit: 'days', reward: 350, timeLeft: '5 days', icon: '🏆' },
 ];
 
 interface ActivityItem {
@@ -38,10 +38,10 @@ function ActivityIcon({ type }: { type: string }) {
 
 function ActivityBadge({ type }: { type: string }) {
   const styles: Record<string, { bg: string; color: string; label: string }> = {
-    jackpot:     { bg: 'rgba(255,215,0,0.2)',   color: '#ffd700', label: 'JACKPOT' },
-    challenge:   { bg: 'rgba(0,217,255,0.2)',   color: '#00d9ff', label: 'CHALLENGE' },
-    achievement: { bg: 'rgba(255,0,255,0.2)',   color: '#ff00ff', label: 'ACHIEVEMENT' },
-    session:     { bg: 'rgba(0,217,255,0.15)',  color: '#00d9ff', label: 'SESSION' },
+    jackpot:     { bg: 'rgba(255,215,0,0.2)',  color: '#ffd700', label: 'JACKPOT' },
+    challenge:   { bg: 'rgba(0,217,255,0.2)',  color: '#00d9ff', label: 'CHALLENGE' },
+    achievement: { bg: 'rgba(255,0,255,0.2)',  color: '#ff00ff', label: 'ACHIEVEMENT' },
+    session:     { bg: 'rgba(0,217,255,0.15)', color: '#00d9ff', label: 'SESSION' },
   };
   const s = styles[type];
   if (!s) return null;
@@ -58,12 +58,30 @@ export function Community() {
   const [joinedChallenges, setJoinedChallenges] = useState<Set<number>>(new Set());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
+
+  // Start at 0 — only go up when users actually join
   const [groupMembers, setGroupMembers] = useState<Record<number, number>>(
-    Object.fromEntries(studyGroups.map(g => [g.id, g.members]))
+    Object.fromEntries(studyGroups.map(g => [g.id, 0]))
+  );
+  const [groupActive, setGroupActive] = useState<Record<number, number>>(
+    Object.fromEntries(studyGroups.map(g => [g.id, 0]))
   );
   const [challengeParticipants, setChallengeParticipants] = useState<Record<number, number>>(
-    Object.fromEntries(challenges.map(c => [c.id, c.participants]))
+    Object.fromEntries(challenges.map(c => [c.id, 0]))
   );
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/community/stats', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setTotalUsers(data.total_users);
+      }
+    } catch (e) {
+      console.error('Failed to fetch community stats:', e);
+    }
+  };
 
   const fetchActivity = async () => {
     try {
@@ -80,29 +98,35 @@ export function Community() {
   };
 
   useEffect(() => {
+    fetchStats();
     fetchActivity();
-    const interval = setInterval(fetchActivity, 30000); // refresh every 30s
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchActivity();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
   const handleGroupClick = (groupId: number) => {
     const group = studyGroups.find(g => g.id === groupId)!;
     if (joinedGroup === groupId) {
+      // Leave
       setJoinedGroup(null);
-      setGroupMembers(prev => ({ ...prev, [groupId]: prev[groupId] - 1 }));
+      setGroupMembers(prev => ({ ...prev, [groupId]: Math.max(0, prev[groupId] - 1) }));
+      setGroupActive(prev => ({ ...prev, [groupId]: Math.max(0, prev[groupId] - 1) }));
     } else {
+      // Leave old group
       if (joinedGroup !== null) {
-        setGroupMembers(prev => ({ ...prev, [joinedGroup]: prev[joinedGroup] - 1 }));
+        setGroupMembers(prev => ({ ...prev, [joinedGroup]: Math.max(0, prev[joinedGroup] - 1) }));
+        setGroupActive(prev => ({ ...prev, [joinedGroup]: Math.max(0, prev[joinedGroup] - 1) }));
       }
+      // Join new group
       setJoinedGroup(groupId);
       setGroupMembers(prev => ({ ...prev, [groupId]: prev[groupId] + 1 }));
-      // Add to local activity feed instantly
+      setGroupActive(prev => ({ ...prev, [groupId]: prev[groupId] + 1 }));
       setActivity(prev => [{
-        user: 'You',
-        action: `joined "${group.name}"`,
-        type: 'achievement',
-        time: 'just now',
-        avatar: '🫵',
+        user: 'You', action: `joined "${group.name}"`,
+        type: 'achievement', time: 'just now', avatar: '🫵',
       }, ...prev.slice(0, 14)]);
     }
   };
@@ -113,16 +137,13 @@ export function Community() {
       const next = new Set(prev);
       if (next.has(challengeId)) {
         next.delete(challengeId);
-        setChallengeParticipants(p => ({ ...p, [challengeId]: p[challengeId] - 1 }));
+        setChallengeParticipants(p => ({ ...p, [challengeId]: Math.max(0, p[challengeId] - 1) }));
       } else {
         next.add(challengeId);
         setChallengeParticipants(p => ({ ...p, [challengeId]: p[challengeId] + 1 }));
         setActivity(prev => [{
-          user: 'You',
-          action: `joined the "${challenge.title}" challenge!`,
-          type: 'challenge',
-          time: 'just now',
-          avatar: '🫵',
+          user: 'You', action: `joined the "${challenge.title}" challenge!`,
+          type: 'challenge', time: 'just now', avatar: '🫵',
         }, ...prev.slice(0, 14)]);
       }
       return next;
@@ -134,7 +155,7 @@ export function Community() {
       {/* Community Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { label: 'Active Students', value: '2,847', icon: Users, color: '#00d9ff' },
+          { label: 'Active Students', value: totalUsers !== null ? totalUsers.toString() : '...', icon: Users, color: '#00d9ff' },
           { label: 'Study Groups', value: '8', icon: Target, color: '#ffd700' },
           { label: 'Active Challenges', value: '5', icon: Trophy, color: '#ff00ff' },
         ].map((stat, index) => {
@@ -216,7 +237,7 @@ export function Community() {
                     <div className="text-xs text-white/50">Members</div>
                   </div>
                   <div>
-                    <div className="text-xl font-bold" style={{ color: group.color }}>{group.active}</div>
+                    <div className="text-xl font-bold" style={{ color: group.color }}>{groupActive[group.id]}</div>
                     <div className="text-xs text-white/50">Active</div>
                   </div>
                 </div>
@@ -259,7 +280,8 @@ export function Community() {
                   <span className="text-2xl">{challenge.icon}</span>
                   <h4 className="text-xl text-white font-bold">{challenge.title}</h4>
                   {isJoined && (
-                    <span className="text-xs px-2 py-0.5 rounded-full font-bold text-black" style={{ background: '#ffd700' }}>JOINED</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-bold text-black"
+                      style={{ background: '#ffd700' }}>JOINED</span>
                   )}
                 </div>
                 <p className="text-sm text-white/70 mb-3">{challenge.description}</p>
@@ -271,7 +293,9 @@ export function Community() {
                 <div className="mb-4">
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-white/70">{challenge.progress} / {challenge.total} {challenge.unit}</span>
-                    <span className="text-[#00d9ff] font-bold">{Math.round((challenge.progress / challenge.total) * 100)}%</span>
+                    <span className="text-[#00d9ff] font-bold">
+                      {Math.round((challenge.progress / challenge.total) * 100)}%
+                    </span>
                   </div>
                   <div className="h-3 bg-black/50 rounded-full overflow-hidden">
                     <motion.div
@@ -299,7 +323,7 @@ export function Community() {
         </div>
       </div>
 
-      {/* Recent Activity Feed — real data from backend */}
+      {/* Recent Activity Feed */}
       <motion.div
         className="relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ff00ff]/30 rounded-2xl p-6 shadow-2xl"
         initial={{ opacity: 0, y: 20 }}
@@ -308,7 +332,6 @@ export function Community() {
         <h3 className="text-2xl text-[#ff00ff] mb-4 font-bold flex items-center gap-2">
           <MessageCircle className="w-7 h-7" /> Recent Activity
         </h3>
-
         {activityLoading ? (
           <div className="text-center text-white/50 py-8">Loading activity...</div>
         ) : activity.length === 0 ? (

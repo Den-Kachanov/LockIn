@@ -790,5 +790,36 @@ def community_activity(db: Session = Depends(get_db)):
     return {"activity": result}
 
 
+# COMMUNITY STATS API
+
+@api_router.get("/community/stats")
+def community_stats(db: Session = Depends(get_db)):
+    """
+    Returns real community stats:
+    - total registered users
+    - users who studied today (active students)
+    - total study sessions today
+    """
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    total_users = db.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
+
+    active_today = db.execute(text(f"""
+        SELECT COUNT(DISTINCT user_id) FROM study_sessions
+        WHERE ended_at >= '{today_start.isoformat()}'
+    """)).scalar() or 0
+
+    sessions_today = db.execute(text(f"""
+        SELECT COUNT(*) FROM study_sessions
+        WHERE ended_at >= '{today_start.isoformat()}'
+    """)).scalar() or 0
+
+    return {
+        "total_users": total_users,
+        "active_today": active_today,
+        "sessions_today": sessions_today,
+    }
+
+
 
 app.include_router(api_router)
