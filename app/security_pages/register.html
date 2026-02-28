@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LockIn Login</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: radial-gradient(circle at top, #0f0c29, #302b63, #24243e);
+    color: #fff;
+  }
+
+  .login-container {
+    background: rgba(0,0,0,0.55);
+    padding: 40px 35px;
+    border-radius: 18px;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+
+  .login-container svg {
+    width: 70px;
+    height: 70px;
+    margin-bottom: 18px;
+    fill: none;
+    stroke: #00d9ff;
+    stroke-width: 2;
+  }
+
+  .login-container h1 {
+    font-size: 32px;
+    margin-bottom: 8px;
+    font-weight: 800;
+    background-image: linear-gradient(to right, rgb(0, 217, 255), rgb(255, 0, 255));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .login-container p.subtitle {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 20px;
+  }
+
+  .login-container form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .login-container input {
+    padding: 10px 12px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+  }
+
+  .login-container button {
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #00d9ff, #ff00ff);
+    color: #fff;
+    font-size: 17px;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+
+  .login-container button:hover {
+    background: linear-gradient(90deg, #ff00ff, #00d9ff);
+  }
+
+  .register-link {
+    margin-top: 12px;
+    font-size: 14px;
+    color: #ccc;
+  }
+
+  .register-link a {
+    color: #ff00ff;
+    text-decoration: none;
+    font-weight: bold;
+  }
+
+  .register-link a:hover {
+    text-decoration: underline;
+  }
+
+  #message {
+    margin-top: 10px;
+    color: #ff7777;
+    font-size: 14px;
+  }
+
+  @media (max-width: 450px) {
+    .login-container {
+      padding: 30px 20px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="login-container">
+  <svg viewBox="0 0 24 24">
+    <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"></path>
+    <path d="M22 10v6"></path>
+    <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"></path>
+  </svg>
+  <h1>UCU LOCK IN</h1>
+  <p class="subtitle">Study Arena</p>
+
+<!-- security/register.html -->
+<form id="registerForm">
+  <input type="text" id="username" placeholder="Username" required /><br/>
+  <input type="email" id="email" placeholder="Email" required /><br/> <!-- new -->
+  <input type="password" id="password" placeholder="Password" required /><br/>
+  <input type="password" id="confirmPassword" placeholder="Confirm Password" required /><br/>
+  <button type="submit">Register</button>
+</form>
+
+
+<p id="message"></p>
+
+<p style="margin-top: 10px; font-size: 14px; color: #ccc;">
+  Have an account? <a href="/login" style="color: #00d9ff; text-decoration: none; font-weight: bold;">Login</a>
+</p>
+
+<script>
+document.getElementById("registerForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const username = document.getElementById("username").value;
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const confirmPassword = document.getElementById("confirmPassword").value;
+
+  if (username.length < 3) {
+    document.getElementById("message").innerText = "Username must be at least 3 characters!";
+    return;
+  }
+
+  if (password.length < 8) {
+    document.getElementById("message").innerText = "Password must be at least 8 characters!";
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    document.getElementById("message").innerText = "Passwords do not match!";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, email, password })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      // auto-login
+      const loginRes = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username, password })
+      });
+
+      if (loginRes.ok) {
+        window.location.href = "/app/index.html"; // redirect to dashboard
+      } else {
+        document.getElementById("message").innerText = "Registered, but login failed.";
+      }
+    } else {
+      document.getElementById("message").innerText = data.detail || data.error;
+    }
+  } catch(err) {
+    document.getElementById("message").innerText = "Network error. Try again.";
+  }
+});
+</script>
+
+
+
+</body>
+</html>
