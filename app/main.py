@@ -7,13 +7,15 @@ from pathlib import Path
 import random
 import json
 import time
+import os
+import shutil
 
 # -----------------------------
 # CONFIG
 # -----------------------------
 from config import properties
 from fastapi import (APIRouter, Depends, FastAPI, HTTPException, Request,
-                     Response)
+                     Response, UploadFile, File, Form)
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -519,6 +521,322 @@ def casino_stats(request: Request, db: Session = Depends(get_db)):
         spins_today=spins_today,
         win_rate=round(win_rate, 1),
     )
+
+
+# ---------------------------
+# REPORTS API
+# ---------------------------
+
+REPORTS_DIR = properties["path"]["root"] / "reports"
+REPORTS_FILE = REPORTS_DIR / "report.txt"
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@api_router.post("/report")
+async def submit_report(
+    request: Request,
+    student_name: str = Form(...),
+    violation_type: str = Form(...),
+    description: str = Form(""),
+    image: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit a report about a violator.
+
+    - Saves report info to report.txt
+    - Creates folder reports/{report_number}/ with uploaded image
+    - Image must be < 10 MB
+    """
+    user = get_current_user_from_cookie(request)
+
+    # Create reports directory if not exists
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+
+    # Determine report number
+    report_number = 1
+    if REPORTS_FILE.exists():
+        with open(REPORTS_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            for line in reversed(lines):
+                if line.startswith("Report #"):
+                    try:
+                        report_number = int(line.split("#")[1].split()[0]) + 1
+                    except (ValueError, IndexError):
+                        pass
+                    break
+
+    # Create folder for this report
+    report_folder = REPORTS_DIR / str(report_number)
+    os.makedirs(report_folder, exist_ok=True)
+
+    # Handle image upload
+    image_filename = "no_image"
+    if image and image.filename:
+        # Check file size
+        content = await image.read()
+        if len(content) > MAX_IMAGE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image too large. Maximum size is 10 MB, got {len(content) / 1024 / 1024:.1f} MB"
+            )
+
+        # Check that it's an image
+        allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+        ext = os.path.splitext(image.filename)[1].lower()
+        if ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
+            )
+
+        # Save image
+        image_filename = f"proof{ext}"
+        image_path = report_folder / image_filename
+        with open(image_path, "wb") as f:
+            f.write(content)
+
+    # Write to report.txt
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    report_entry = (
+        f"Report #{report_number}\n"
+        f"  Date: {timestamp}\n"
+        f"  Reporter: {user}\n"
+        f"  Student: {student_name}\n"
+        f"  Violation: {violation_type}\n"
+        f"  Description: {description}\n"
+        f"  Image: {image_filename}\n"
+        f"  Folder: reports/{report_number}/\n"
+        f"{'-' * 40}\n"
+    )
+
+    with open(REPORTS_FILE, "a", encoding="utf-8") as f:
+        f.write(report_entry)
+
+    logger.info("Report #%s submitted by %s against %s (%s)",
+                report_number, user, student_name, violation_type)
+
+    return {
+        "message": "Report submitted successfully",
+        "report_number": report_number,
+    }
+
+
+# ---------------------------
+# PROGRESS API
+# ---------------------------
+
+@api_router.get("/progress/stats")
+def progress_stats(request: Request, db: Session = Depends(get_db)):
+    """Get user progress data for charts and achievements."""
+    user = get_current_user_from_cookie(request)
+    db_user = db.query(User).filter_by(username=user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    total_minutes = db_user.total_study_minutes or 0
+    total_sessions = db.execute(
+        text(f"SELECT COUNT(*) FROM study_sessions WHERE user_id = {db_user.id}")
+    ).scalar() or 0
+
+    # Weekly data (last 7 days)
+    weekly = []
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_week = today - timedelta(days=today.weekday())
+    for i in range(7):
+        day_start = start_of_week + timedelta(days=i)
+        day_end = day_start + timedelta(days=1)
+        mins = db.execute(
+            text(f"SELECT COALESCE(SUM(duration_minutes), 0) FROM study_sessions WHERE user_id = {db_user.id} AND started_at >= '{day_start.isoformat()}' AND started_at < '{day_end.isoformat()}'")
+        ).scalar() or 0
+        weekly.append({"day": day_names[i], "hours": round(mins / 60, 1)})
+
+    # Monthly data (last 4 weeks)
+    monthly = []
+    for w in range(4):
+        w_start = today - timedelta(weeks=3 - w, days=today.weekday())
+        w_end = w_start + timedelta(weeks=1)
+        mins = db.execute(
+            text(f"SELECT COALESCE(SUM(duration_minutes), 0) FROM study_sessions WHERE user_id = {db_user.id} AND started_at >= '{w_start.isoformat()}' AND started_at < '{w_end.isoformat()}'")
+        ).scalar() or 0
+        monthly.append({"week": f"Week {w+1}", "hours": round(mins / 60, 1)})
+
+    # Calendar data (current month - which days had activity)
+    month_start = today.replace(day=1)
+    if today.month == 12:
+        next_month = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        next_month = today.replace(month=today.month + 1, day=1)
+
+    calendar_rows = db.execute(
+        text(f"SELECT DATE(started_at) as d, SUM(duration_minutes) as mins FROM study_sessions WHERE user_id = {db_user.id} AND started_at >= '{month_start.isoformat()}' AND started_at < '{next_month.isoformat()}' GROUP BY DATE(started_at)")
+    ).fetchall()
+    calendar_data = {str(row[0]): int(row[1]) for row in calendar_rows}
+
+    # Achievements - based on real data
+    achievements = [
+        {"name": "Study Marathon", "icon": "🏃", "progress": min(total_sessions, 100), "total": 100, "desc": "Complete 100 sessions"},
+        {"name": "Night Owl", "icon": "🦉", "progress": min(total_minutes // 60, 20), "total": 20, "desc": "Study 20 hours total"},
+        {"name": "Early Bird", "icon": "🐦", "progress": min(db_user.current_streak or 0, 30), "total": 30, "desc": "30 day streak"},
+        {"name": "Consistency King", "icon": "👑", "progress": min(total_sessions, 50), "total": 50, "desc": "Complete 50 sessions"},
+        {"name": "Point Collector", "icon": "💰", "progress": min((db_user.points or 0) // 100, 50), "total": 50, "desc": "Earn 5000 points"},
+        {"name": "Casino Master", "icon": "🎰", "progress": min(
+            db.execute(text(f"SELECT COUNT(*) FROM casino_spins WHERE user_id = {db_user.id}")).scalar() or 0, 100
+        ), "total": 100, "desc": "Make 100 spins"},
+    ]
+
+    avg_session = round(total_minutes / max(total_sessions, 1))
+
+    return {
+        "total_study_minutes": total_minutes,
+        "total_sessions": total_sessions,
+        "avg_session_minutes": avg_session,
+        "current_streak": db_user.current_streak or 0,
+        "weekly": weekly,
+        "monthly": monthly,
+        "calendar": calendar_data,
+        "achievements": achievements,
+        "today_day": today.day,
+        "month_name": today.strftime("%B %Y"),
+    }
+
+
+# ---------------------------
+# PROFILE API
+# ---------------------------
+
+@api_router.get("/profile")
+def get_profile(request: Request, db: Session = Depends(get_db)):
+    """Get full profile data."""
+    user = get_current_user_from_cookie(request)
+    db_user = db.query(User).filter_by(username=user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    total_sessions = db.execute(
+        text(f"SELECT COUNT(*) FROM study_sessions WHERE user_id = {db_user.id}")
+    ).scalar() or 0
+
+    # Get rank
+    all_users = db.query(User).order_by(User.total_study_minutes.desc()).all()
+    my_rank = 1
+    for i, u in enumerate(all_users):
+        if u.username == user:
+            my_rank = i + 1
+            break
+
+    total_minutes = db_user.total_study_minutes or 0
+
+    # Badges based on progress
+    badges = [
+        {"icon": "🏃", "name": "Marathon", "unlocked": total_sessions >= 10},
+        {"icon": "🔥", "name": "Streak", "unlocked": (db_user.current_streak or 0) >= 3},
+        {"icon": "⚡", "name": "Speed", "unlocked": total_sessions >= 5},
+        {"icon": "🦉", "name": "Night Owl", "unlocked": total_minutes >= 600},
+        {"icon": "🐦", "name": "Early Bird", "unlocked": (db_user.current_streak or 0) >= 7},
+        {"icon": "👑", "name": "Royalty", "unlocked": (db_user.points or 0) >= 5000},
+    ]
+
+    return {
+        "username": db_user.username,
+        "email": db_user.email,
+        "points": db_user.points or 0,
+        "total_study_minutes": total_minutes,
+        "total_sessions": total_sessions,
+        "current_streak": db_user.current_streak or 0,
+        "rank": my_rank,
+        "badges": badges,
+        "notifications_on": True,
+        "privacy_mode": False,
+    }
+
+
+@api_router.post("/profile/update")
+def update_profile(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Update username."""
+    user = get_current_user_from_cookie(request)
+    db_user = db.query(User).filter_by(username=user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "Profile updated"}
+
+
+@api_router.post("/profile/edit_username")
+async def edit_username(request: Request, db: Session = Depends(get_db)):
+    """Edit username."""
+    user = get_current_user_from_cookie(request)
+    body = await request.json()
+    new_username = body.get("username", "").strip()
+
+    if len(new_username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    if len(new_username) > 32:
+        raise HTTPException(status_code=400, detail="Username must be at most 32 characters")
+
+    db_user = db.query(User).filter_by(username=user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    existing = db.query(User).filter_by(username=new_username).first()
+    if existing and existing.id != db_user.id:
+        raise HTTPException(status_code=400, detail="Username already taken")
+
+    db_user.username = new_username
+    db.commit()
+
+    # Issue new token with new username
+    token = create_access_token(new_username)
+    return {"message": "Username updated", "new_token": token}
+
+
+@api_router.post("/reset_progress")
+def reset_progress(request: Request, db: Session = Depends(get_db)):
+    """Reset all user progress."""
+    user = get_current_user_from_cookie(request)
+    db_user = db.query(User).filter_by(username=user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db_user.points = 1000
+    db_user.total_study_minutes = 0
+    db_user.current_streak = 0
+    db_user.last_study_date = None
+
+    db.execute(text(f"DELETE FROM study_sessions WHERE user_id = {db_user.id}"))
+    db.execute(text(f"DELETE FROM casino_spins WHERE user_id = {db_user.id}"))
+    db.commit()
+
+    logger.info("User %s reset all progress", user)
+    return {"message": "All progress has been reset"}
+
+
+@api_router.delete("/delete_account")
+def delete_account(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Delete user account permanently."""
+    user = get_current_user_from_cookie(request)
+    db_user = db.query(User).filter_by(username=user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db.execute(text(f"DELETE FROM study_sessions WHERE user_id = {db_user.id}"))
+    db.execute(text(f"DELETE FROM casino_spins WHERE user_id = {db_user.id}"))
+    db.delete(db_user)
+    db.commit()
+
+    response.delete_cookie("access_token", path="/")
+    logger.info("User %s deleted account", user)
+    return {"message": "Account deleted successfully"}
+
+
+@api_router.post("/logout")
+def logout(request: Request, response: Response):
+    """Logout - clear cookie."""
+    response.delete_cookie("access_token", path="/")
+    return {"message": "Logged out successfully"}
 
 
 app.include_router(api_router)
