@@ -685,4 +685,110 @@ async def submit_report(
         "report_number": report_number,
     }
 
+
+# COMMUNITY ACTIVITY API
+
+@api_router.get("/community/activity")
+def community_activity(db: Session = Depends(get_db)):
+    """
+    Returns real recent activity feed based on:
+    - Casino jackpots (3 matching slots)
+    - Completed study sessions
+    - Streaks >= 3 days
+    """
+    activity = []
+
+    jackpot_spins = db.execute(text("""
+        SELECT u.username, cs.created_at, cs.result_slots, cs.win_amount
+        FROM casino_spins cs
+        JOIN users u ON u.id = cs.user_id
+        WHERE cs.win_amount > 0
+        ORDER BY cs.created_at DESC
+        LIMIT 20
+    """)).fetchall()
+
+    for row in jackpot_spins:
+        try:
+            slots = json.loads(row[2])
+            if slots[0] == slots[1] == slots[2]:
+                event_type = "jackpot"
+                action = f"hit a JACKPOT on the slot machine! (+{row[3]} ⭐)"
+            else:
+                event_type = "achievement"
+                action = f"won {row[3]} ⭐ at the casino!"
+            activity.append({
+                "user": row[0],
+                "action": action,
+                "type": event_type,
+                "created_at": row[1],
+            })
+        except Exception:
+            pass
+
+    sessions = db.execute(text("""
+        SELECT u.username, ss.ended_at, ss.duration_minutes, u.current_streak
+        FROM study_sessions ss
+        JOIN users u ON u.id = ss.user_id
+        WHERE ss.ended_at IS NOT NULL
+        ORDER BY ss.ended_at DESC
+        LIMIT 20
+    """)).fetchall()
+
+    for row in sessions:
+        username, ended_at, duration, streak = row
+        if streak and streak >= 3:
+            activity.append({
+                "user": username,
+                "action": f"is on a 🔥 {streak}-day study streak!",
+                "type": "achievement",
+                "created_at": ended_at,
+            })
+        else:
+            activity.append({
+                "user": username,
+                "action": f"completed a {duration}-minute study session!",
+                "type": "session",
+                "created_at": ended_at,
+            })
+
+    def parse_dt(item):
+        val = item["created_at"]
+        if val is None:
+            return datetime.min
+        if isinstance(val, str):
+            try:
+                return datetime.fromisoformat(val)
+            except Exception:
+                return datetime.min
+        return val
+
+    activity.sort(key=parse_dt, reverse=True)
+    activity = activity[:15]
+
+    now = datetime.utcnow()
+    result = []
+    avatars = ['🧑‍💻', '👩‍🎓', '👨‍💼', '👩‍🔬', '👨‍🎨', '👩‍💻', '🧑‍🎓', '👨‍🔬', '👩‍🎨', '🧑‍💼']
+    for i, item in enumerate(activity):
+        dt = parse_dt(item)
+        diff = now - dt
+        minutes_ago = int(diff.total_seconds() / 60)
+        if minutes_ago < 1:
+            time_str = "just now"
+        elif minutes_ago < 60:
+            time_str = f"{minutes_ago}m ago"
+        else:
+            time_str = f"{minutes_ago // 60}h ago"
+
+        result.append({
+            "user": item["user"],
+            "action": item["action"],
+            "type": item["type"],
+            "time": time_str,
+            "avatar": avatars[i % len(avatars)],
+        })
+
+    return {"activity": result}
+
+
+
 app.include_router(api_router)
