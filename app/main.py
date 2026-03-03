@@ -110,9 +110,7 @@ class User(Base):
     last_study_date = Column(String, nullable=True)
     theme = Column(String, default="cyber")
     group_id = Column(Integer, ForeignKey("study_groups.id"), nullable=True)
-    challenges = relationship(
-        "Challenge", secondary=user_challenges, back_populates="users"
-    )
+    challenges = relationship("UserChallenge", back_populates="user")
 
 
 class StudySessionTable(Base):
@@ -200,6 +198,19 @@ class ChallengeCreate(BaseModel):
 class ChallengeProgressUpdate(BaseModel):
     challenge_id: int
     progress: int  # new progress value
+
+
+class UserChallenge(Base):
+    __tablename__ = "user_challenges"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    challenge_id = Column(Integer, ForeignKey("challenges.id"), primary_key=True)
+
+    progress = Column(Integer, default=0)
+    completed = Column(Integer, default=0)
+
+    user = relationship("User", back_populates="user_challenges")
+    challenge = relationship("Challenge")
 
 
 # -----------------------------
@@ -797,6 +808,7 @@ def casino_spin(
             if challenge.progress >= challenge.total and progress_added > 0:
                 # Award challenge reward
                 db_user.points += challenge.reward
+                db_user.challenge.completed = 1
                 challenge_updates.append(
                     f"🎉 {challenge.title} COMPLETED! +{challenge.reward} bonus points!"
                 )
