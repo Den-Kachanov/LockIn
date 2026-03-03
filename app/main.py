@@ -74,7 +74,7 @@ DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 SECRET_KEY = properties["secret_key"]
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 14
 
 FRONT_END = properties["path"]["frontend"] / "dist"
 SECURITY_PAGES = properties["path"]["security_pages"]
@@ -489,17 +489,6 @@ class AuthRequiredMiddleware(BaseHTTPMiddleware):
                 username = payload.get("sub")
                 if not username:
                     return RedirectResponse("/login")
-
-                # Check user exists
-                db = SessionLocal()
-                user = db.query(User).filter_by(username=username).first()
-                db.close()
-                if not user:
-                    # User deleted -> force logout
-                    return RedirectResponse("/login")
-
-                # Optional: attach user object to request
-                request.state.user = user
 
             except JWTError:
                 return RedirectResponse("/login")
