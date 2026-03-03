@@ -90,12 +90,6 @@ Base = declarative_base()
 # -----------------------------
 # TABLES
 # -----------------------------
-user_challenges = Table(
-    "user_challenges",
-    Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
-    Column("challenge_id", Integer, ForeignKey("challenges.id"), primary_key=True),
-)
 
 
 class User(Base):
@@ -175,7 +169,6 @@ class Challenge(Base):
     time_left = Column(String)
     unit = Column(String, nullable=True)
     icon = Column(String, nullable=True)
-    users = relationship("User", secondary=user_challenges, back_populates="challenges")
 
 
 class Activity(Base):
@@ -209,7 +202,7 @@ class UserChallenge(Base):
     progress = Column(Integer, default=0)
     completed = Column(Integer, default=0)
 
-    user = relationship("User", back_populates="user_challenges")
+    user = relationship("User", back_populates="challenges")
     challenge = relationship("Challenge")
 
 
@@ -373,7 +366,7 @@ def seed_challenges_and_groups():
             },
             # Casino-specific challenges
             {
-                "title": "Casino Master",
+                "title": "Lucky Charm Master",
                 "description": "Make 100 spins in the Lucky Charm",
                 "total": 100,
                 "reward": 300,
@@ -534,13 +527,18 @@ async def register_page():
 # ROOT REDIRECT
 # -----------------------------
 @app.get("/")
-async def root(request: Request):
-    """Redirects if user does not have / have invalid access token"""
+async def root(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
     if token:
         try:
-            jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            return RedirectResponse("/app/index.html")
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username = payload.get("sub")
+            if not username:
+                return RedirectResponse("/login")
+
+            db_user = db.query(User).filter_by(username=username).first()
+            if db_user:
+                return RedirectResponse("/app/index.html")
         except JWTError:
             pass
     return RedirectResponse("/login")
@@ -554,23 +552,20 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.post("/register")
 def register(data: UserRegister, response: Response, db: Session = Depends(get_db)):
-    """
-    POST register
-
-    Validates nickname and register usar"""
-    # check username
     if db.query(User).filter_by(username=data.username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
 
+    if db.query(User).filter_by(email=data.email).first():
+        raise HTTPException(status_code=400, detail="Email already in use")
+
     user = User(
         username=data.username,
-        email=data.email,  # save email
+        email=data.email,
         password_hash=hash_password(data.password),
-        points=100000,  # starting bonus
+        points=100000,
     )
     db.add(user)
     db.commit()
-
     return {"message": "Registered successfully"}
 
 
@@ -774,43 +769,40 @@ def casino_spin(
 
     # Update challenge progress for challenges user is participating in
     challenge_updates = []
-    if hasattr(db_user, "challenges") and db_user.challenges:
-        for challenge in db_user.challenges:
-            progress_added = 0
 
-            if challenge.unit == "points" and win_amount > 0:
-                # For challenges like "Point Collector" - only count winnings
-                progress_added = win_amount
-                challenge.progress = min(
-                    challenge.progress + progress_added, challenge.total
-                )
-                challenge_updates.append(f"{challenge.title}: +{progress_added} points")
+    for uc in db_user.challenges:  # uc is a UserChallenge row (per-user)
+        ch = uc.challenge  # ch is the Challenge (has .unit, .title, etc.)
 
-            elif challenge.unit == "spins" or (
-                challenge.unit == "sessions" and "casino" in challenge.title.lower()
-            ):
-                # For challenges like "Casino Master" - count each spin
-                progress_added = 1
-                challenge.progress = min(
-                    challenge.progress + progress_added, challenge.total
-                )
-                challenge_updates.append(f"{challenge.title}: +1 spin")
+        if uc.completed:  # skip already-completed challenges
+            continue
 
-            elif challenge.unit == "jackpots" and is_jackpot:
-                # For potential jackpot-specific challenges
-                progress_added = 1
-                challenge.progress = min(
-                    challenge.progress + progress_added, challenge.total
-                )
-                challenge_updates.append(f"{challenge.title}: +1 jackpot")
+        progress_added = 0
 
-            # Check if challenge is completed
-            if challenge.progress >= challenge.total and progress_added > 0:
-                # Award challenge reward
-                db_user.points += challenge.reward
-                db_user.challenge.completed = 1
+        if ch.unit == "points" and win_amount > 0:
+            progress_added = win_amount
+            challenge_updates.append(f"{ch.title}: +{progress_added} points")
+
+        elif ch.unit == "spins" or (
+            ch.unit == "sessions" and "casino" in ch.title.lower()
+        ):
+            progress_added = 1
+            challenge_updates.append(f"{ch.title}: +1 spin")
+
+        elif ch.unit == "jackpots" and is_jackpot:
+            progress_added = 1
+            challenge_updates.append(f"{ch.title}: +1 jackpot")
+
+        if progress_added > 0:
+            uc.progress = min(
+                uc.progress + progress_added, ch.total
+            )  # write to UserChallenge, not Challenge
+
+            # Check completion
+            if uc.progress >= ch.total:
+                uc.completed = 1  # mark THIS user's row as done
+                db_user.points += ch.reward  # reward THIS user only
                 challenge_updates.append(
-                    f"🎉 {challenge.title} COMPLETED! +{challenge.reward} bonus points!"
+                    f"🎉 {ch.title} COMPLETED! +{ch.reward} bonus points!"
                 )
 
     db.commit()
@@ -1292,10 +1284,19 @@ def reset_progress(request: Request, db: Session = Depends(get_db)):
     db_user.current_streak = 0
     db_user.last_study_date = None
 
-    db.execute(text(f"DELETE FROM study_sessions WHERE user_id = {db_user.id}"))
-    db.execute(text(f"DELETE FROM casino_spins WHERE user_id = {db_user.id}"))
-    db.commit()
+    # Delete sessions and spins
+    db.query(StudySessionTable).filter_by(user_id=db_user.id).delete()
+    db.query(CasinoSpinTable).filter_by(user_id=db_user.id).delete()
 
+    # Reset challenge progress (don't delete — keep them enrolled, just zero out)
+    db.query(UserChallenge).filter_by(user_id=db_user.id).update(
+        {
+            "progress": 0,
+            "completed": 0,
+        }
+    )
+
+    db.commit()
     logger.info("User %s reset all progress", user)
     return {"message": "All progress has been reset"}
 
@@ -1308,8 +1309,11 @@ def delete_account(request: Request, response: Response, db: Session = Depends(g
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.execute(text(f"DELETE FROM study_sessions WHERE user_id = {db_user.id}"))
-    db.execute(text(f"DELETE FROM casino_spins WHERE user_id = {db_user.id}"))
+    db.query(StudySessionTable).filter_by(user_id=db_user.id).delete()
+    db.query(CasinoSpinTable).filter_by(user_id=db_user.id).delete()
+    db.query(RewardPurchase).filter_by(user_id=db_user.id).delete()
+    db.query(UserChallenge).filter_by(user_id=db_user.id).delete()
+
     db.delete(db_user)
     db.commit()
 
@@ -1379,15 +1383,15 @@ def log_study_session(
     # Update challenge progress for challenges user is participating in
     challenge_updates = []
     if hasattr(db_user, "challenges") and db_user.challenges:
-        for challenge in db_user.challenges:
-            progress_added = 0
+        for uc in db_user.challenges:
+            challenge = uc.challenge
+            if uc.completed:
+                continue
 
             if challenge.unit == "minutes":
                 # For challenges like "Study 5 Hours" (300 minutes)
                 progress_added = minutes
-                challenge.progress = min(
-                    challenge.progress + progress_added, challenge.total
-                )
+                uc.progress = min(uc.progress + progress_added, challenge.total)
                 challenge_updates.append(
                     f"{challenge.title}: +{progress_added} minutes"
                 )
@@ -1395,27 +1399,22 @@ def log_study_session(
             elif challenge.unit == "sessions":
                 # For challenges like "Weekly Marathon" or "Night Owl Challenge"
                 progress_added = 1
-                challenge.progress = min(
-                    challenge.progress + progress_added, challenge.total
-                )
+                uc.progress = min(uc.progress + progress_added, challenge.total)
                 challenge_updates.append(f"{challenge.title}: +1 session")
 
             elif challenge.unit == "points":
                 # For challenges like "Point Collector"
-                progress_added = stars_earned
-                challenge.progress = min(
-                    challenge.progress + progress_added, challenge.total
-                )
+                progress_added = stars_earneds
+                uc.progress = min(uc.progress + progress_added, challenge.total)
                 challenge_updates.append(f"{challenge.title}: +{progress_added} points")
 
             # Check if challenge is completed
-            if challenge.progress >= challenge.total:
-                # Award challenge reward
+            if uc.progress >= challenge.total:
+                uc.completed = 1
                 db_user.points += challenge.reward
                 challenge_updates.append(
                     f"🎉 {challenge.title} COMPLETED! +{challenge.reward} bonus points!"
                 )
-
     db.commit()
 
     logger.info(
@@ -1857,16 +1856,20 @@ def get_challenges(db: Session = Depends(get_db), request: Request = None):
 
     for challenge in challenges:
         # Determine if current user is participating
-        user_is_participant = False
+        user_is_participant = 0
         if db_user and hasattr(db_user, "challenges") and db_user.challenges:
-            user_is_participant = challenge in db_user.challenges
+            user_uc = next(
+                (uc for uc in db_user.challenges if uc.challenge_id == challenge.id),
+                None,
+            )
+            user_is_participant = int(user_uc is not None)
 
         challenges_list.append(
             {
                 "id": challenge.id,
                 "title": challenge.title,
                 "description": challenge.description,
-                "progress": challenge.progress,
+                "progress": user_uc.progress if user_is_participant else 0,
                 "total": challenge.total,
                 "reward": challenge.reward,
                 "participants": challenge.participants,
@@ -1884,7 +1887,7 @@ def get_challenges(db: Session = Depends(get_db), request: Request = None):
 def update_challenge_progress(
     data: ChallengeProgressUpdate, request: Request, db: Session = Depends(get_db)
 ):
-    """Update a user’s progress in a challenge."""
+    """Update a user's progress in a challenge."""
     username = get_current_user_from_cookie(request)
     db_user = db.query(User).filter_by(username=username).first()
     challenge = db.query(Challenge).filter_by(id=data.challenge_id).first()
@@ -1892,17 +1895,41 @@ def update_challenge_progress(
     if not db_user or not challenge:
         raise HTTPException(status_code=404, detail="User or challenge not found")
 
-    # Increase challenge progress
-    challenge.progress = min(challenge.progress + data.progress, challenge.total)
-    # Increment participants if this is first progress
-    if challenge.progress == data.progress:
-        challenge.participants += 1
+    # Get this user's personal row in user_challenges
+    uc = (
+        db.query(UserChallenge)
+        .filter_by(user_id=db_user.id, challenge_id=challenge.id)
+        .first()
+    )
+
+    if not uc:
+        raise HTTPException(
+            status_code=400, detail="You are not participating in this challenge"
+        )
+
+    if uc.completed:
+        return {
+            "message": f"Challenge '{challenge.title}' is already completed",
+            "current_progress": uc.progress,
+            "total": challenge.total,
+            "completed": True,
+        }
+
+    # Update this user's personal progress
+    uc.progress = min(uc.progress + data.progress, challenge.total)
+
+    # Check completion
+    if uc.progress >= challenge.total:
+        uc.completed = 1
+        db_user.points += challenge.reward
 
     db.commit()
+
     return {
         "message": f"Progress updated for challenge '{challenge.title}'",
-        "current_progress": challenge.progress,
+        "current_progress": uc.progress,
         "total": challenge.total,
+        "completed": bool(uc.completed),
     }
 
 
@@ -1937,8 +1964,15 @@ def join_challenge(data: dict, request: Request, db: Session = Depends(get_db)):
     if not db_user or not challenge:
         raise HTTPException(status_code=404, detail="User or challenge not found")
 
-    if challenge not in db_user.challenges:
-        db_user.challenges.append(challenge)
+    already = (
+        db.query(UserChallenge)
+        .filter_by(user_id=db_user.id, challenge_id=challenge.id)
+        .first()
+    )
+    if not already:
+        uc = UserChallenge(user_id=db_user.id, challenge_id=challenge.id)
+        db.add(uc)
+
         challenge.participants += 1
         db.commit()
 
@@ -1956,8 +1990,13 @@ def leave_challenge(data: dict, request: Request, db: Session = Depends(get_db))
     if not db_user or not challenge:
         raise HTTPException(status_code=404, detail="User or challenge not found")
 
-    if challenge in db_user.challenges:
-        db_user.challenges.remove(challenge)
+    uc = (
+        db.query(UserChallenge)
+        .filter_by(user_id=db_user.id, challenge_id=challenge.id)
+        .first()
+    )
+    if uc:
+        db.delete(uc)
         challenge.participants = max(challenge.participants - 1, 0)
         db.commit()
 

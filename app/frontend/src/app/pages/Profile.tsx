@@ -166,79 +166,28 @@ export function Profile() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Settings */}
-        <motion.div
-          className="relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ff00ff]/30 rounded-2xl p-6 shadow-2xl"
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-        >
-          <h3 className="text-2xl text-[#ff00ff] mb-6 font-bold flex items-center gap-2"><Settings className="w-7 h-7" /> Settings</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-black/30 rounded-xl border border-white/10">
-              <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-[#00d9ff]" />
-                <div><h4 className="text-white font-semibold">Notifications</h4><p className="text-xs text-white/50">Get study reminders</p></div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={notifications} onChange={() => setNotifications(!notifications)} />
-                <div className="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#00d9ff] peer-checked:to-[#ff00ff]"></div>
-              </label>
-            </div>
-            <div className="flex items-center justify-between p-4 bg-black/30 rounded-xl border border-white/10">
-              <div className="flex items-center gap-3">
-                <Lock className="w-5 h-5 text-[#ffd700]" />
-                <div><h4 className="text-white font-semibold">Privacy Mode</h4><p className="text-xs text-white/50">Hide from leaderboard</p></div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={privacyMode} onChange={() => setPrivacyMode(!privacyMode)} />
-                <div className="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#00d9ff] peer-checked:to-[#ff00ff]"></div>
-              </label>
-            </div>
-            <div className="p-4 bg-black/30 rounded-xl border border-white/10">
-              <h4 className="text-white font-semibold mb-3">Study Preferences</h4>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-white/50 mb-1 block">Study Session Duration</label>
-                  <select className="w-full px-3 py-2 bg-black/50 border border-white/20 rounded-lg text-white text-sm focus:border-[#00d9ff] focus:outline-none">
-                    <option>25 minutes (Pomodoro)</option><option>45 minutes</option><option>60 minutes</option><option>90 minutes</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-white/50 mb-1 block">Break Duration</label>
-                  <select className="w-full px-3 py-2 bg-black/50 border border-white/20 rounded-lg text-white text-sm focus:border-[#00d9ff] focus:outline-none">
-                    <option>5 minutes</option><option>10 minutes</option><option>15 minutes</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Badges */}
-        <motion.div
-          className="relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ffd700]/30 rounded-2xl p-6 shadow-2xl"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-        >
-          <h3 className="text-2xl text-[#ffd700] mb-6 font-bold flex items-center gap-2">🏆 Badges & Achievements</h3>
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            {profile.badges.map((badge) => (
-              <motion.div
-                key={badge.name}
-                className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center p-2 ${badge.unlocked ? 'bg-gradient-to-br from-[#ffd700]/20 to-[#ff00ff]/20 border-[#ffd700]/50' : 'bg-black/30 border-white/10 opacity-40'}`}
-                whileHover={badge.unlocked ? { scale: 1.1 } : {}}
-              >
-                <div className="text-3xl mb-1">{badge.icon}</div>
-                <div className="text-xs text-white/70 text-center">{badge.name}</div>
-                {badge.unlocked && <div className="text-[8px] text-[#ffd700] mt-1">UNLOCKED</div>}
-              </motion.div>
-            ))}
-          </div>
-          <p className="text-xs text-white/40 text-center">Badges are based on your real progress and may reset monthly</p>
-        </motion.div>
-      </div>
-
+      {/* Badges */}
+      <motion.div
+        className="relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ffd700]/30 rounded-2xl p-6 shadow-2xl"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+      >
+        <h3 className="text-2xl text-[#ffd700] mb-6 font-bold flex items-center gap-2">🏆 Badges & Achievements</h3>
+        <div className="flex flex-row gap-4 mb-6">
+          {profile.badges.map((badge) => (
+            <motion.div
+              key={badge.name}
+              className={`flex-1 h-32 rounded-xl border-2 flex flex-col items-center justify-center p-2 ${badge.unlocked ? 'bg-gradient-to-br from-[#ffd700]/20 to-[#ff00ff]/20 border-[#ffd700]/50' : 'bg-black/30 border-white/10 opacity-40'}`}
+              whileHover={badge.unlocked ? { scale: 1.05 } : {}}
+            >
+              <div className="text-3xl mb-1">{badge.icon}</div>
+              <div className="text-xs text-white/70 text-center">{badge.name}</div>
+              {badge.unlocked && <div className="text-[8px] text-[#ffd700] mt-1">UNLOCKED</div>}
+            </motion.div>
+          ))}
+        </div>
+        <p className="text-xs text-white/40 text-center">Badges are based on your real progress and may reset monthly</p>
+      </motion.div>
       {/* Danger Zone */}
       <motion.div
         className="relative bg-gradient-to-br from-red-900/20 to-orange-900/20 backdrop-blur-xl border-2 border-red-500/30 rounded-2xl p-6 shadow-2xl"

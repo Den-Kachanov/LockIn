@@ -153,6 +153,12 @@ document.getElementById("registerForm").addEventListener("submit", async (e) => 
     return;
   }
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    document.getElementById("message").innerText = "Please enter a valid email address.";
+    return;
+  }
+
   if (password !== confirmPassword) {
     document.getElementById("message").innerText = "Passwords do not match!";
     return;
