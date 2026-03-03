@@ -4,3 +4,4 @@ sqlalchemy==2.0.20
 pydantic==2.12.5
 python-jose==3.3.0
 passlib[bcrypt]
+argon2_cffi
