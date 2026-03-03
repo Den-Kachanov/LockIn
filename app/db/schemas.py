@@ -80,6 +80,7 @@ class CasinoSpinResponse(BaseModel):
     is_jackpot: bool
     is_double: bool
     new_balance: int
+    challenge_updates: list[str] = []
 
 
 class CasinoStatsResponse(BaseModel):
@@ -87,3 +88,27 @@ class CasinoStatsResponse(BaseModel):
     total_winnings: int
     spins_today: int
     win_rate: float
+
+
+
+
+class GroupOut(BaseModel):
+    id: int
+    name: str
+    subject: str
+    emoji: str
+    color: str
+    members: int
+    active: int
+
+class ChallengeOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    progress: int
+    total: int
+    unit: str
+    reward: int
+    participants: int
+    timeLeft: str
+    icon: str

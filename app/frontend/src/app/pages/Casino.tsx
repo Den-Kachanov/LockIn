@@ -213,6 +213,7 @@ function SingleSlotMachine({ id, betAmount, onSpinComplete, disabled }: SlotMach
   );
 }
 
+
 export function Casino() {
   const [casinoStats, setCasinoStats] = useState<CasinoStats>({
     total_points: 0,
@@ -307,7 +308,7 @@ export function Casino() {
             }}
             transition={{ duration: 2, repeat: Infinity }}
           >
-            🎰 LOCK IN CASINO 🎰
+            🎰 LUCKY CHARM 🎰
           </motion.h2>
           <p className="text-xl text-white/70 mb-6">
             Server-powered random — fair play guaranteed!
@@ -331,40 +332,19 @@ export function Casino() {
         </div>
       </div>
 
-      {/* Payout Table */}
+      {/* How to Win */}
       <motion.div
-        className="relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#00d9ff]/30 rounded-2xl p-6 shadow-2xl"
+        className="mt-6 p-6 bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ffd700]/30 rounded-2xl shadow-2xl"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h3 className="text-2xl text-[#00d9ff] mb-6 font-bold">💎 Payout Table</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {slotSymbols.map((symbol) => {
-            const Icon = symbol.icon;
-            return (
-              <motion.div
-                key={symbol.label}
-                className="p-4 bg-black/30 rounded-xl border border-white/10 text-center"
-                whileHover={{ scale: 1.05, borderColor: symbol.color }}
-              >
-                <Icon className="w-10 h-10 mx-auto mb-2" style={{ color: symbol.color }} />
-                <div className="text-xs text-white/70 mb-1">{symbol.label}</div>
-                <div className="text-sm font-bold" style={{ color: symbol.color }}>
-                  {symbol.value * 3} pts
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-        <div className="mt-6 p-4 bg-black/30 rounded-xl border border-[#ffd700]/30">
-          <h4 className="text-white font-bold mb-2">🎯 How to Win:</h4>
-          <ul className="text-sm text-white/70 space-y-1">
-            <li>• Match 3 symbols = 3x symbol value (server random!)</li>
-            <li>• Match 2 symbols = 1.5x your bet</li>
-            <li>• Results generated on server — no cheating possible!</li>
-            <li>• Complete study sessions to earn free spins!</li>
-          </ul>
-        </div>
+        <h3 className="text-2xl text-[#ffd700] mb-4 font-bold">🎯 How to Win</h3>
+        <ul className="text-white/70 text-sm space-y-2 list-disc list-inside">
+          <li>Match 3 symbols = 3x symbol value (server random!)</li>
+          <li>Match 2 symbols = 1.5x your bet</li>
+          <li>Results generated on server — no cheating possible!</li>
+          <li>Complete study sessions to earn free spins!</li>
+        </ul>
       </motion.div>
     </div>
   );

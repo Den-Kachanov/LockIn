@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Pizza Slice",
+    "description": "Enjoy a tasty pizza reward",
+    "cost": 100,
+    "icon": "🍕",
+    "color": "#FFA500",
+    "available": 100
+  },
+  {
+    "name" : "Latte",
+    "description" : "Mmmm...",
+    "cost" : 200,
+    "icon" : "☕",
+    "color" : "#DDAA60",
+    "available" : 40
+  },
+  {
+    "name" : "Cake",
+    "description" : "Some sugar!",
+    "cost" : 300,
+    "icon" : "🍰",
+    "color" : "#DACA90",
+    "available" : 30
+  }
+]

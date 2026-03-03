@@ -14,13 +14,17 @@ interface UserStats {
   weekly_goal_minutes: number;
 }
 
+interface DashboardProps {
+  onNavigate?: (page: string) => void;
+}
+
 function formatTime(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h}h ${m}m`;
 }
 
-export function Dashboard() {
+export function Dashboard({ onNavigate }: DashboardProps) {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,9 +58,9 @@ export function Dashboard() {
         <Leaderboard />
       </div>
 
-      <div className="lg:col-span-6 order-1 lg:order-2">
-        <SlotMachine />
-        <PomodoroTimer />
+      <div className="lg:col-span-6 order-1 lg:order-2 flex flex-col gap-4 md:gap-6">
+        <SlotMachine onNavigate={onNavigate} />
+        <PomodoroTimer onSessionComplete={fetchStats} />
         <ReportSection />
       </div>
 

@@ -52,3 +52,20 @@ class LoggingMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
+
+# Purchase-specific logger
+purchase_logger = logging.getLogger("purchases")
+purchase_logger.setLevel(logging.INFO)
+
+# File handler
+purchase_handler = logging.FileHandler("purchases.log")
+purchase_handler.setLevel(logging.INFO)
+
+# Formatter
+formatter = logging.Formatter(
+    "%(asctime)s - USER: %(username)s - PURCHASE_ID: %(purchase_id)s - %(message)s"
+)
+purchase_handler.setFormatter(formatter)
+
+# Add handler to logger
+purchase_logger.addHandler(purchase_handler)

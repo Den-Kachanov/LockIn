@@ -1,98 +1,97 @@
-import { motion } from 'motion/react';
-import { ShoppingBag, Coffee, Pizza, Gift, Trophy, Star, Sparkles } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { ShoppingBag, Coffee, Pizza, Gift, Trophy, Star, Sparkles, TrendingUp } from "lucide-react";
+import axios from "axios";
 
-const rewards = [
-  {
-    id: 1,
-    name: 'Free Coffee',
-    description: 'Get a free coffee at UCU Café',
-    cost: 100,
-    icon: Coffee,
-    color: '#ffd700',
-    available: 5,
-  },
-  {
-    id: 2,
-    name: 'Pizza Slice',
-    description: 'Free pizza slice at cafeteria',
-    cost: 150,
-    icon: Pizza,
-    color: '#ff00ff',
-    available: 3,
-  },
-  {
-    id: 3,
-    name: 'Mystery Box',
-    description: 'Random reward between 50-500 points',
-    cost: 200,
-    icon: Gift,
-    color: '#00d9ff',
-    available: 10,
-  },
-  {
-    id: 4,
-    name: 'Grade Boost',
-    description: '+0.1 to final grade (one-time)',
-    cost: 500,
-    icon: TrendingUp,
-    color: '#ffd700',
-    available: 1,
-  },
-  {
-    id: 5,
-    name: 'Skip Assignment',
-    description: 'Skip one homework assignment',
-    cost: 800,
-    icon: Star,
-    color: '#ff00ff',
-    available: 2,
-  },
-  {
-    id: 6,
-    name: 'VIP Study Room',
-    description: '2 hours in premium study room',
-    cost: 300,
-    icon: Trophy,
-    color: '#00d9ff',
-    available: 4,
-  },
-];
-
-const purchaseHistory = [
-  { item: 'Free Coffee', date: '2026-02-10', points: 100 },
-  { item: 'Pizza Slice', date: '2026-02-08', points: 150 },
-  { item: 'Mystery Box', date: '2026-02-05', points: 200 },
-];
-
-import { TrendingUp } from 'lucide-react';
+const ICONS = { Coffee, Pizza, Gift, Trophy, Star, Sparkles, TrendingUp, ShoppingBag };
 
 export function Rewards() {
-  const userPoints = 1247;
+  const [rewards, setRewards] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [userPoints, setUserPoints] = useState(0);
+  const [message, setMessage] = useState<string | null>(null); // for modal notification
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [rewardsRes, historyRes, profileRes] = await Promise.all([
+          axios.get("/api/rewards"),
+          axios.get("/api/rewards/history"),
+          axios.get("/api/profile"),
+        ]);
+
+        setRewards(rewardsRes.data || []);
+        setHistory(historyRes.data || []);
+        setUserPoints(profileRes.data?.points || 0);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    fetchData();
+  }, []);
+
+  const handlePurchase = async (id) => {
+    try {
+      const res = await axios.post(`/api/rewards/purchase/${id}`);
+      setUserPoints(res.data.new_points);
+
+      // Refresh rewards and history
+      const [rewardsRes, historyRes] = await Promise.all([
+        axios.get("/api/rewards"),
+        axios.get("/api/rewards/history"),
+      ]);
+      setRewards(rewardsRes.data || []);
+      setHistory(historyRes.data || []);
+
+      // Get reward info by id
+      const reward = rewards.find(r => r.id === id);
+      const itemName = reward?.name || "your reward";
+
+      setMessage(`🎉 You successfully purchased "${itemName}"!`);
+      setTimeout(() => setMessage(null), 2000);
+
+    } catch (e) {
+      setMessage(`❌ ${e.response?.data?.detail || "Error purchasing reward"}`);
+      setTimeout(() => setMessage(null), 2000);
+    }
+  };
+
 
   return (
-    <div className="space-y-6">
-      {/* Points Balance */}
-      <motion.div
-        className="relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ffd700]/50 rounded-2xl p-8 shadow-2xl text-center"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <motion.div
-          className="absolute -inset-2 bg-[#ffd700]/20 rounded-2xl blur-xl"
-          animate={{ opacity: [0.3, 0.6, 0.3] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        />
-        <div className="relative">
-          <Sparkles className="w-12 h-12 text-[#ffd700] mx-auto mb-3" />
-          <h2 className="text-2xl text-white/70 mb-2">Your Points Balance</h2>
+    <div className="space-y-6 p-6 relative">
+      {/* Centered Modal Notification */}
+      <AnimatePresence>
+        {message && (
           <motion.div
-            className="text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[#ffd700] via-[#ff00ff] to-[#00d9ff] font-bold"
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
-            {userPoints.toLocaleString()} ⭐
+            {/* Dimmed backdrop */}
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+
+            {/* Modal */}
+            <motion.div
+              className="relative bg-gradient-to-r from-[#00d9ff] via-[#ff00ff] to-[#ffd700] text-black font-bold px-8 py-6 rounded-3xl shadow-2xl text-center max-w-sm mx-4"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {message}
+            </motion.div>
           </motion.div>
-        </div>
+        )}
+      </AnimatePresence>
+
+      {/* Points Balance */}
+      <motion.div className="text-center" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <Sparkles className="w-12 h-12 text-[#ffd700] mx-auto mb-3" />
+        <h2 className="text-2xl text-white/70 mb-2">Your Points Balance</h2>
+        <motion.div className="text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[#ffd700] via-[#ff00ff] to-[#00d9ff] font-bold">
+          {userPoints.toLocaleString()} ⭐
+        </motion.div>
       </motion.div>
 
       {/* Rewards Shop */}
@@ -102,72 +101,34 @@ export function Rewards() {
           Rewards Shop
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rewards.map((reward, index) => {
-            const Icon = reward.icon;
+          {rewards.map((reward) => {
+            const Icon = ICONS[reward.icon] || Coffee;
             const canAfford = userPoints >= reward.cost;
-
             return (
               <motion.div
                 key={reward.id}
-                className={`relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 rounded-2xl p-6 shadow-2xl ${
-                  canAfford ? 'border-white/20' : 'border-white/10 opacity-60'
-                }`}
-                initial={{ opacity: 0, y: 20 }}
+                className="bg-white/5 p-4 rounded-2xl shadow-md"
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={canAfford ? { y: -5, scale: 1.02 } : {}}
               >
-                {/* Glow Effect */}
-                {canAfford && (
-                  <motion.div
-                    className="absolute -inset-1 rounded-2xl blur-lg"
-                    style={{ backgroundColor: reward.color, opacity: 0.2 }}
-                    animate={{ opacity: [0.2, 0.4, 0.2] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                )}
-
                 <div className="relative">
-                  {/* Icon */}
                   <div
                     className="w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto"
-                    style={{
-                      background: `linear-gradient(135deg, ${reward.color}40, ${reward.color}20)`,
-                    }}
+                    style={{ background: `linear-gradient(135deg, ${reward.color || "#ffffff"}40, ${reward.color || "#ffffff"}20)` }}
                   >
-                    <Icon className="w-8 h-8" style={{ color: reward.color }} />
+                    <Icon className="w-8 h-8" style={{ color: reward.color || "#fff" }} />
                   </div>
-
-                  {/* Content */}
-                  <h4 className="text-xl text-white font-bold mb-2 text-center">
-                    {reward.name}
-                  </h4>
-                  <p className="text-sm text-white/60 mb-4 text-center h-10">
-                    {reward.description}
-                  </p>
-
-                  {/* Cost and Available */}
+                  <h4 className="text-xl text-white font-bold mb-2 text-center">{reward.name}</h4>
+                  <p className="text-sm text-white/60 mb-4 text-center h-10">{reward.description}</p>
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-[#ffd700] font-bold text-lg">
-                      {reward.cost} ⭐
-                    </span>
-                    <span className="text-xs text-white/50">
-                      {reward.available} available
-                    </span>
+                    <span className="text-[#ffd700] font-bold text-lg">{reward.cost} ⭐</span>
+                    <span className="text-xs text-white/50">{reward.available} available</span>
                   </div>
-
-                  {/* Purchase Button */}
                   <motion.button
-                    className={`w-full py-3 rounded-xl font-bold ${
-                      canAfford
-                        ? 'bg-gradient-to-r from-[#00d9ff] to-[#ff00ff] text-white'
-                        : 'bg-white/10 text-white/30 cursor-not-allowed'
-                    }`}
-                    disabled={!canAfford}
-                    whileHover={canAfford ? { scale: 1.05 } : {}}
-                    whileTap={canAfford ? { scale: 0.95 } : {}}
+                    onClick={() => canAfford && handlePurchase(reward.id)}
+                    className={`w-full py-3 rounded-xl font-bold ${canAfford ? "bg-gradient-to-r from-[#00d9ff] to-[#ff00ff] text-white" : "bg-white/10 text-white/30 cursor-not-allowed"}`}
                   >
-                    {canAfford ? 'Purchase' : 'Not Enough Points'}
+                    {canAfford ? "Purchase" : "Not Enough Points"}
                   </motion.button>
                 </div>
               </motion.div>
@@ -177,21 +138,15 @@ export function Rewards() {
       </div>
 
       {/* Purchase History */}
-      <motion.div
-        className="relative bg-gradient-to-br from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ff00ff]/30 rounded-2xl p-6 shadow-2xl"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div className="mt-6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <h3 className="text-2xl text-[#ff00ff] mb-4 font-bold">📜 Purchase History</h3>
-        
         <div className="space-y-3">
-          {purchaseHistory.map((purchase, index) => (
+          {history.length > 0 ? history.map((purchase, index) => (
             <motion.div
               key={index}
-              className="flex items-center justify-between p-4 bg-black/30 rounded-xl border border-white/10"
+              className="bg-white/5 p-3 rounded-xl flex justify-between items-center"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
             >
               <div>
                 <h4 className="text-white font-semibold">{purchase.item}</h4>
@@ -201,14 +156,10 @@ export function Rewards() {
                 <div className="text-[#ffd700] font-bold">-{purchase.points} ⭐</div>
               </div>
             </motion.div>
-          ))}
+          )) : (
+            <div className="text-center py-12 text-white/50">No purchases yet.</div>
+          )}
         </div>
-
-        {purchaseHistory.length === 0 && (
-          <div className="text-center py-12 text-white/50">
-            No purchases yet. Start redeeming rewards!
-          </div>
-        )}
       </motion.div>
     </div>
   );

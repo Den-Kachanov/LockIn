@@ -11,7 +11,8 @@ PATHS = {
     "frontend": BASE_DIR / "frontend",
     "db": BASE_DIR / "db",
     "secrets": BASE_DIR / "secrets",
-    "security_pages" : BASE_DIR / "security_pages"
+    "security_pages" : BASE_DIR / "security_pages",
+    "rewards" : BASE_DIR / "rewards",
 }
 
 

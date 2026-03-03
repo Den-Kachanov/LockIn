@@ -44,3 +44,22 @@ class CasinoSpin(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="spins")
+
+
+class Reward(Base):
+    __tablename__ = "rewards"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    cost = Column(Integer, nullable=False)
+    icon = Column(String, nullable=True)  # зберігати ім'я іконки
+    color = Column(String, nullable=True)
+    available = Column(Integer, nullable=False)
+
+class RewardPurchase(Base):
+    __tablename__ = "reward_purchases"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    reward_id = Column(Integer, ForeignKey("rewards.id"), nullable=False)
+    points_spent = Column(Integer, nullable=False)
+    purchased_at = Column(DateTime, default=datetime.utcnow)
