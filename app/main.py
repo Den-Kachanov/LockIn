@@ -1478,8 +1478,16 @@ def get_purchase_history(request: Request, db: Session = Depends(get_db)):
     ]
 
 
+from fastapi import BackgroundTasks
+
+
 @api_router.post("/rewards/purchase/{reward_id}")
-def purchase_reward(reward_id: int, request: Request, db: Session = Depends(get_db)):
+def purchase_reward(
+    reward_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     user = get_current_user_from_cookie(request)
     db_user = db.query(User).filter_by(username=user).first()
     reward = db.query(Reward).filter_by(id=reward_id).first()
@@ -1494,7 +1502,6 @@ def purchase_reward(reward_id: int, request: Request, db: Session = Depends(get_
     db_user.points -= reward.cost
     reward.available -= 1
 
-    # Mystery Box logic
     bonus_message = ""
     if reward.name.lower() == "mystery box":
         if random.random() < 0.5:
@@ -1512,15 +1519,14 @@ def purchase_reward(reward_id: int, request: Request, db: Session = Depends(get_
     purchase = RewardPurchase(
         user_id=db_user.id, reward_id=reward.id, points_spent=reward.cost
     )
-
     db.add(purchase)
     db.commit()
-    db.refresh(purchase)  # ensure purchase.id is available
+    db.refresh(purchase)
+
     purchase_logger.info(
         f"Purchased '{reward.name}' for {reward.cost} points{bonus_message}",
         extra={"username": db_user.username, "purchase_id": purchase.id},
     )
-
     logger.info(
         "User '%s' purchased '%s'%s, new points: %d",
         db_user.username,
@@ -1529,16 +1535,15 @@ def purchase_reward(reward_id: int, request: Request, db: Session = Depends(get_
         db_user.points,
     )
 
-    # Send email
-    try:
-        send_purchase_email(
-            to_email=db_user.email,
-            username=db_user.username,
-            reward_name=reward.name,
-            purchase_id=purchase.id,
-        )
-    except Exception as e:
-        logger.error("Failed to send email for purchase #%s: %s", purchase.id, str(e))
+    # Fire and forget — doesn't block the response
+    background_tasks.add_task(
+        send_purchase_email,
+        to_email=db_user.email,
+        username=db_user.username,
+        reward_name=reward.name,
+        purchase_id=purchase.id,
+        bonus_message=bonus_message,
+    )
 
     return {
         "message": f"You purchased {reward.name}!{bonus_message}",
@@ -1614,8 +1619,7 @@ def send_purchase_email(
     )
     msg.set_content(body)
 
-    with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
-        server.starttls()
+    with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as server:
         server.login(EMAIL_USER, EMAIL_PASSWORD)
         server.send_message(msg)
 
