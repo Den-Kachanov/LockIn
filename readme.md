@@ -102,3 +102,13 @@ LockIn/
 | DELETE | `/api/delete_account` | Delete account |
 | POST | `/api/logout` | Logout |
 
+## Authors
+
+- Kachanov Denys
+- Kharkhalis Marta
+- Shymushovska Khrystyna
+- Koval Yaroslav
+
+## Mentors
+- Prokhorov Roman
+- Pasichnyk Nazar
