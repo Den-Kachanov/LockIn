@@ -1098,13 +1098,6 @@ def progress_stats(request: Request, db: Session = Depends(get_db)):
             "desc": "Complete 50 sessions",
         },
         {
-            "name": "Point Collector",
-            "icon": "💰",
-            "progress": min((db_user.points or 0) // 100, 50),
-            "total": 50,
-            "desc": "Earn 5000 points",
-        },
-        {
             "name": "Casino Master",
             "icon": "🎰",
             "progress": min(

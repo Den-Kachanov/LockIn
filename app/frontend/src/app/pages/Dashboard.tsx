@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { PomodoroTimer } from '../components/PomodoroTimer';
-import { SlotMachine } from '../components/SlotMachine';
 import { Leaderboard } from '../components/Leaderboard';
 import { ReportSection } from '../components/ReportSection';
 
@@ -59,7 +58,25 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       </div>
 
       <div className="lg:col-span-6 order-1 lg:order-2 flex flex-col gap-4 md:gap-6">
-        <SlotMachine onNavigate={onNavigate} />
+
+        {/* Lucky Charm Banner */}
+        <button
+          onClick={() => onNavigate?.('casino')}
+          className="w-full relative bg-gradient-to-r from-[#1a1f3a]/80 to-[#2d1b4e]/80 backdrop-blur-xl border-2 border-[#ffd700]/40 rounded-2xl p-6 shadow-2xl hover:border-[#ffd700]/80 hover:scale-[1.01] transition-all duration-200 text-left"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#ffd700] to-[#ff00ff]">
+                🎰 Lucky Charm
+              </div>
+              <div className="text-white/60 text-sm mt-1">
+                Spin the slots and win points
+              </div>
+            </div>
+            <div className="text-4xl">🍀</div>
+          </div>
+        </button>
+
         <PomodoroTimer onSessionComplete={fetchStats} />
         <ReportSection />
       </div>
