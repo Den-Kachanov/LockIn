@@ -1580,10 +1580,10 @@ if ".env" in os.listdir():
 
     load_dotenv()  # loads variables from .env
 
-EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_HOST = os.getenv("EMAIL_HOST", None)
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
-EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_USER = os.getenv("EMAIL_USER", None)
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", None)
 
 
 import smtplib
@@ -1598,6 +1598,11 @@ def send_purchase_email(
     bonus_message: str = "",
 ):
     """Send purchase confirmation to user."""
+
+    if not all([EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD]):
+        print("Failed to send email")
+        return
+
     msg = EmailMessage()
     msg["Subject"] = f"Reward Purchase Confirmation: {reward_name}"
     msg["From"] = EMAIL_USER
